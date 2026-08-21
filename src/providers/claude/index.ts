@@ -10,7 +10,7 @@ export function createClaudeAdapter(timeoutMs = 30000): ProviderAdapter {
     listTools: () => tools,
     async callTool(name, args) {
       if (!key || name !== "claude.generate") throw new GatewayError("PROVIDER_UNAVAILABLE", "Claude is not configured.", 503);
-      const { input, model = "claude-sonnet-4-20250514" } = args as { input?: string; model?: string };
+      const { input, model = process.env.CLAUDE_MODEL ?? "claude-sonnet-4-20250514" } = args as { input?: string; model?: string };
       if (!input) throw new GatewayError("PROVIDER_VALIDATION_FAILED", "input is required.", 422);
       const data = await upstreamJson<{ content?: Array<{ type?: string; text?: string }> }>("https://api.anthropic.com/v1/messages", {
         method: "POST", headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
