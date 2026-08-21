@@ -1,4 +1,4 @@
-const SECRET_KEYS = new Set(["authorization", "apiKey", "apikey", "token", "access_token", "refresh_token", "password", "cookie", "set-cookie", "client_secret", "secret"]);
+const SECRET_KEYS = new Set(["authorization", "apikey", "token", "access_token", "refresh_token", "password", "cookie", "set-cookie", "client_secret", "secret"]);
 
 export function redactSecrets(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactSecrets);
