@@ -28,26 +28,24 @@ export function createMcpHttpHandler(config: GatewayConfig, registry: ProviderRe
   const allowedTools = (process.env.ALLOWED_TOOLS ?? "").split(",").map((v) => v.trim()).filter(Boolean);
   const effectiveAllowedTools = allowedTools.length ? allowedTools : registry.listTools().map((tool) => tool.name);
 
-  const handler = createMcpHandler(() => {
+  const handler = createMcpHandler(({ requestInfo }) => {
     const server = new McpServer({ name: "BIG CRUISE AI NETWORK", version: "0.1.0" }, { capabilities: { tools: {} } });
+    const requestHeaders = requestInfo ? new Headers(requestInfo.headers) : new Headers();
+    const callerKey = clientKey(requestHeaders);
     for (const tool of registry.listTools()) {
       server.registerTool(
         tool.name,
-        {
-          description: tool.description,
-          inputSchema: z.record(z.string(), z.unknown()),
-        },
+        { description: tool.description, inputSchema: z.record(z.string(), z.unknown()) },
         async (args) => {
           const requestId = randomUUID();
           try {
             assertToolAllowed(tool.name, effectiveAllowedTools);
             const providerId = tool.name.split(".", 1)[0];
-            limiter.check(clientKey(new Headers()), providerId);
-            const result = await withTimeout(
-              routeToolCall(registry, tool.name, args, { requestId, providerId, toolName: tool.name }),
+            limiter.check(callerKey, providerId);
+            return await withTimeout(
+              routeToolCall(registry, tool.name, args, { requestId, providerId, toolName: tool.name, clientKey: callerKey }),
               config.requestTimeoutMs,
             );
-            return result;
           } catch (error) {
             const safe = safeGatewayError(error);
             return { content: [{ type: "text", text: `${safe.code}: ${safe.message}` }], isError: true };
@@ -67,13 +65,11 @@ export function createMcpHttpHandler(config: GatewayConfig, registry: ProviderRe
       res.end(await response.text());
       return;
     }
-
     if (req.url?.split("?", 1)[0] !== "/mcp") {
       res.writeHead(404, jsonHeaders);
       res.end(JSON.stringify({ error: "Not found" }));
       return;
     }
-
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
     try {
