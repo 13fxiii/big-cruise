@@ -1,13 +1,13 @@
-import { loadConfig } from "./config/env.js";
+import { loadConfig, type GatewayConfig } from "./config/env.js";
 import { createProviderRegistry } from "./registry/providers.js";
 import { createMcpHttpHandler } from "./server/http.js";
 
-export function createGatewayServer(overrides?: Partial<ReturnType<typeof loadConfig>>) {
-  const config = { ...loadConfig(), ...overrides };
-  const registry = createProviderRegistry(config.requestTimeoutMs);
-  const server = createMcpHttpHandler(config, registry);
+export function createGatewayServer(config?: GatewayConfig) {
+  const resolved = config ?? loadConfig();
+  const registry = createProviderRegistry(resolved.requestTimeoutMs);
+  const server = createMcpHttpHandler(resolved, registry);
   return {
-    listen(port = config.port, host = "0.0.0.0") {
+    listen(port = resolved.port, host = "0.0.0.0") {
       return new Promise<{ port: number }>((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => {
