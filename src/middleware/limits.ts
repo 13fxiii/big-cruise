@@ -1,16 +1,17 @@
 import { GatewayError } from "../security/errors.js";
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+export async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new GatewayError("PROVIDER_TIMEOUT", "Provider request timed out.", 504)), timeoutMs);
-      }),
-    ]);
+    return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new GatewayError("PROVIDER_TIMEOUT", "Provider request timed out.", 504);
+    }
+    throw error;
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
