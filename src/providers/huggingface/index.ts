@@ -35,18 +35,20 @@ async function callFluxMcp(url: string, args: Record<string, unknown>, timeoutMs
   const transport = new SSEClientTransport(new URL(url));
   try {
     await client.connect(transport);
-    const result = await client.callTool({
-      name: "flux1_schnell_infer",
-      arguments: {
-        prompt: args.prompt,
-        seed: args.seed,
-        randomize_seed: args.randomize_seed ?? true,
-        width: args.width ?? 1024,
-        height: args.height ?? 1024,
-        num_inference_steps: args.num_inference_steps ?? 4,
+    const result = await client.callTool(
+      {
+        name: "flux1_schnell_infer",
+        arguments: {
+          prompt: args.prompt,
+          seed: args.seed,
+          randomize_seed: args.randomize_seed ?? true,
+          width: args.width ?? 1024,
+          height: args.height ?? 1024,
+          num_inference_steps: args.num_inference_steps ?? 4,
+        },
       },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+      { signal: AbortSignal.timeout(timeoutMs) },
+    );
     return textResult(serializeMcpResult(result));
   } catch (error) {
     throw new GatewayError(
