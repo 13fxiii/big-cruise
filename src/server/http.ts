@@ -16,10 +16,10 @@ const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-
 
 type JsonSchema = Record<string, unknown>;
 
-function clientKey(headers: Headers, remoteAddress: string | undefined): string {
+function clientKey(headers: Headers): string {
   const token = headers.get("authorization") ?? "anonymous";
-  const identity = `${token}:${remoteAddress ?? "unknown"}`;
-  return createHash("sha256").update(identity).digest("hex");
+  const clientId = headers.get("x-client-id") ?? "anonymous";
+  return createHash("sha256").update(`${token}:${clientId}`).digest("hex");
 }
 
 function schemaToZod(schema: JsonSchema): z.ZodTypeAny {
@@ -76,7 +76,7 @@ export function createMcpHttpHandler(config: GatewayConfig, registry: ProviderRe
   const handler = createMcpHandler(({ requestInfo }) => {
     const server = new McpServer({ name: "BIG CRUISE AI NETWORK", version: "0.1.0" }, { capabilities: { tools: {} } });
     const requestHeaders = requestInfo ? new Headers(requestInfo.headers) : new Headers();
-    const callerKey = clientKey(requestHeaders, undefined);
+    const callerKey = clientKey(requestHeaders);
     for (const tool of registry.listTools()) {
       server.registerTool(
         tool.name,
