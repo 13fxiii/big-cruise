@@ -1,0 +1,46 @@
+name: MCP Gateway
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Environment diagnostics
+        run: |
+          set -euxo pipefail
+          echo "Runner: $RUNNER_OS / $RUNNER_ARCH"
+          node --version
+          npm --version
+          npm config get registry
+          git --version
+
+      - name: Install dependencies
+        run: npm install --verbose
+
+      - name: Dependency diagnostics
+        if: ${{ !cancelled() }}
+        run: |
+          set -euxo pipefail
+          npm ls --depth=0 || true
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

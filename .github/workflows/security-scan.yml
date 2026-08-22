@@ -1,0 +1,144 @@
+name: MCP Gateway Security
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  gateway-smoke:
+    name: Gateway security smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Start gateway
+        env:
+          GATEWAY_SECRET: ci-test-secret
+          PORT: 8787
+          ALLOWED_ORIGINS: http://localhost:8787
+          MAX_BODY_BYTES: 65536
+          RATE_LIMIT_PER_MINUTE: 60
+          REQUEST_TIMEOUT_MS: 5000
+        run: |
+          nohup npm start > /tmp/big-cruise-mcp.log 2>&1 &
+          echo $! > /tmp/big-cruise-mcp.pid
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8787/health > /tmp/health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/big-cruise-mcp.log
+          exit 1
+
+      - name: Verify health endpoint
+        run: |
+          curl --fail --silent http://127.0.0.1:8787/health
+
+      - name: Verify MCP authentication
+        run: |
+          status=$(curl --silent --output /tmp/unauthorized.json --write-out '%{http_code}' \
+            -X POST http://127.0.0.1:8787/mcp \
+            -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          test "$status" = "401"
+
+      - name: Verify origin policy
+        run: |
+          status=$(curl --silent --output /tmp/bad-origin.json --write-out '%{http_code}' \
+            -X POST http://127.0.0.1:8787/mcp \
+            -H 'authorization: Bearer ci-test-secret' \
+            -H 'origin: https://evil.example' \
+            -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          test "$status" = "403"
+
+      - name: Verify request-size limit
+        run: |
+          status=$(python3 - <<'PY'
+          import http.client
+          body = b'x' * 70000
+          conn = http.client.HTTPConnection('127.0.0.1', 8787, timeout=10)
+          conn.request('POST', '/mcp', body=body, headers={
+              'authorization': 'Bearer ci-test-secret',
+              'origin': 'http://localhost:8787',
+              'content-type': 'application/json',
+              'content-length': str(len(body)),
+          })
+          print(conn.getresponse().status)
+          PY
+          )
+          test "$status" = "413"
+
+      - name: Stop gateway
+        if: always()
+        run: |
+          if [ -f /tmp/big-cruise-mcp.pid ]; then
+            kill "$(cat /tmp/big-cruise-mcp.pid)" 2>/dev/null || true
+          fi
