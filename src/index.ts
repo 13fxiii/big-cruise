@@ -23,7 +23,8 @@ export function createGatewayServer(config?: GatewayConfig) {
   };
 }
 
-if (process.env.NODE_ENV !== "test") {
+const runningTests = process.argv.includes("--test") || process.env.NODE_ENV === "test";
+if (!runningTests) {
   const gateway = createGatewayServer();
   gateway.listen().then(({ port }) => console.log(`BIG CRUISE MCP Gateway listening on ${port}`)).catch((error) => {
     console.error("Gateway startup failed", error instanceof Error ? error.message : "unknown error");
