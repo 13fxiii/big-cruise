@@ -22,37 +22,30 @@ function clientKey(headers: Headers): string {
   return createHash("sha256").update(`${token}:${clientId}`).digest("hex");
 }
 
-function schemaToZod(schema: JsonSchema): z.ZodTypeAny {
-  let value: z.ZodTypeAny;
+function schemaToZod(schema: JsonSchema): z.ZodType {
   switch (schema.type) {
     case "string": {
-      let stringSchema = z.string();
-      if (typeof schema.minLength === "number") stringSchema = stringSchema.min(schema.minLength);
-      if (typeof schema.maxLength === "number") stringSchema = stringSchema.max(schema.maxLength);
-      value = stringSchema;
-      break;
+      let value = z.string();
+      if (typeof schema.minLength === "number") value = value.min(schema.minLength);
+      if (typeof schema.maxLength === "number") value = value.max(schema.maxLength);
+      return value;
     }
     case "number":
     case "integer": {
-      let numberSchema = z.number();
-      if (typeof schema.minimum === "number") numberSchema = numberSchema.min(schema.minimum);
-      if (typeof schema.maximum === "number") numberSchema = numberSchema.max(schema.maximum);
-      value = numberSchema;
-      break;
+      let value = z.number();
+      if (typeof schema.minimum === "number") value = value.min(schema.minimum);
+      if (typeof schema.maximum === "number") value = value.max(schema.maximum);
+      return value;
     }
     case "boolean":
-      value = z.boolean();
-      break;
+      return z.boolean();
     case "array":
-      value = z.array(schema.items && typeof schema.items === "object" ? schemaToZod(schema.items as JsonSchema) : z.unknown());
-      break;
+      return z.array(schema.items && typeof schema.items === "object" ? schemaToZod(schema.items as JsonSchema) : z.unknown());
     case "object":
-      value = z.object(jsonSchemaToZodShape(schema));
-      break;
+      return z.object(jsonSchemaToZodShape(schema));
     default:
-      value = z.unknown();
+      return z.unknown();
   }
-  return schema.default !== undefined ? value.default(schema.default) : value;
 }
 
 function jsonSchemaToZodShape(schema: JsonSchema | undefined): z.ZodRawShape {
