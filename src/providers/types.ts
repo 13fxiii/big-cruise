@@ -3,6 +3,7 @@ export interface RequestContext {
   providerId: string;
   toolName: string;
   clientKey?: string;
+  signal?: AbortSignal;
 }
 
 export interface ToolDefinition {
