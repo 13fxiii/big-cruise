@@ -5,10 +5,10 @@ export async function upstreamJson<T>(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, { ...init, signal });
     const text = await response.text();
     let body: unknown = undefined;
     try { body = text ? JSON.parse(text) : undefined; } catch { body = undefined; }
@@ -23,8 +23,6 @@ export async function upstreamJson<T>(
     if (error instanceof GatewayError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") throw new GatewayError("PROVIDER_TIMEOUT", "Provider request timed out.", 504);
     throw new GatewayError("PROVIDER_UNAVAILABLE", "Provider is unavailable.", 503);
-  } finally {
-    clearTimeout(timer);
   }
 }
 
