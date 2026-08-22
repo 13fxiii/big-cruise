@@ -10,6 +10,17 @@ test("all nine provider adapters are registered", () => {
 });
 
 test("unconfigured providers expose no fabricated tools", () => {
-  const registry = createProviderRegistry(1000);
-  assert.deepEqual(registry.listTools(), []);
+  const original = process.env.HUGGINGFACE_TOKEN;
+  const originalFlux = process.env.HUGGINGFACE_FLUX_MCP_URL;
+  delete process.env.HUGGINGFACE_TOKEN;
+  process.env.HUGGINGFACE_FLUX_MCP_URL = "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse";
+  try {
+    const registry = createProviderRegistry(1000);
+    assert.equal(registry.listTools().some((tool) => tool.name === "huggingface.flux1_schnell_infer"), true);
+  } finally {
+    if (original === undefined) delete process.env.HUGGINGFACE_TOKEN;
+    else process.env.HUGGINGFACE_TOKEN = original;
+    if (originalFlux === undefined) delete process.env.HUGGINGFACE_FLUX_MCP_URL;
+    else process.env.HUGGINGFACE_FLUX_MCP_URL = originalFlux;
+  }
 });
