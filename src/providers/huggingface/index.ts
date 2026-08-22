@@ -30,7 +30,7 @@ function serializeMcpResult(result: unknown): string {
   });
 }
 
-async function callFluxMcp(url: string, args: Record<string, unknown>, timeoutMs: number): Promise<ToolResult> {
+async function callFluxMcp(url: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<ToolResult> {
   const client = new Client({ name: "big-cruise-mcp-gateway", version: "0.1.0" });
   const transport = new SSEClientTransport(new URL(url));
   try {
@@ -47,10 +47,11 @@ async function callFluxMcp(url: string, args: Record<string, unknown>, timeoutMs
           num_inference_steps: args.num_inference_steps ?? 4,
         },
       },
-      { signal: AbortSignal.timeout(timeoutMs) },
+      { signal: signal ?? AbortSignal.timeout(timeoutMs) },
     );
     return textResult(serializeMcpResult(result));
   } catch (error) {
+    if (signal?.aborted) throw new GatewayError("PROVIDER_TIMEOUT", "Provider request timed out.", 504);
     throw new GatewayError(
       "PROVIDER_UPSTREAM_ERROR",
       `Hugging Face FLUX MCP request failed: ${error instanceof Error ? error.message : "unknown error"}`,
@@ -75,13 +76,13 @@ export function createHuggingFaceAdapter(timeoutMs = 30000): ProviderAdapter {
   return {
     id: "huggingface",
     listTools: () => tools,
-    async callTool(name, args) {
+    async callTool(name, args, context) {
       if (name === fluxTool.name) {
         const input = (args ?? {}) as Record<string, unknown>;
         if (typeof input.prompt !== "string" || !input.prompt.trim()) {
           throw new GatewayError("PROVIDER_VALIDATION_FAILED", "prompt is required.", 422);
         }
-        return callFluxMcp(fluxUrl, input, timeoutMs);
+        return callFluxMcp(fluxUrl, input, timeoutMs, context.signal);
       }
 
       if (!token || !tools.some((tool) => tool.name === name)) {
@@ -93,17 +94,18 @@ export function createHuggingFaceAdapter(timeoutMs = 30000): ProviderAdapter {
       const kind = name.endsWith("models") ? "models" : "datasets";
       const data = await upstreamJson<unknown>(
         `https://huggingface.co/api/${kind}?search=${encodeURIComponent(query)}&limit=10`,
-        { headers: { authorization: `Bearer ${token}` } },
+        { headers: { authorization: `Bearer ${token}` }, signal: context.signal },
         timeoutMs,
       );
       return textResult(JSON.stringify(data, null, 2));
     },
     async healthCheck() {
-      return {
-        id: "huggingface",
-        status: fluxUrl ? "available" : "unavailable",
-        detail: fluxUrl ? `FLUX MCP configured at ${new URL(fluxUrl).origin}` : "FLUX MCP URL not configured",
-      };
+      try {
+        const parsed = new URL(fluxUrl);
+        return { id: "huggingface", status: "available", detail: `FLUX MCP configured at ${parsed.origin}` };
+      } catch (error) {
+        return { id: "huggingface", status: "unavailable", detail: `FLUX MCP URL is invalid: ${error instanceof Error ? error.message : "unknown error"}` };
+      }
     },
   };
 }
