@@ -25,17 +25,21 @@ function clientKey(headers: Headers): string {
 function schemaToZod(schema: JsonSchema): z.ZodTypeAny {
   let value: z.ZodTypeAny;
   switch (schema.type) {
-    case "string":
-      value = z.string();
-      if (typeof schema.minLength === "number") value = value.min(schema.minLength);
-      if (typeof schema.maxLength === "number") value = value.max(schema.maxLength);
+    case "string": {
+      let stringSchema = z.string();
+      if (typeof schema.minLength === "number") stringSchema = stringSchema.min(schema.minLength);
+      if (typeof schema.maxLength === "number") stringSchema = stringSchema.max(schema.maxLength);
+      value = stringSchema;
       break;
+    }
     case "number":
-    case "integer":
-      value = z.number();
-      if (typeof schema.minimum === "number") value = value.min(schema.minimum);
-      if (typeof schema.maximum === "number") value = value.max(schema.maximum);
+    case "integer": {
+      let numberSchema = z.number();
+      if (typeof schema.minimum === "number") numberSchema = numberSchema.min(schema.minimum);
+      if (typeof schema.maximum === "number") numberSchema = numberSchema.max(schema.maximum);
+      value = numberSchema;
       break;
+    }
     case "boolean":
       value = z.boolean();
       break;
@@ -48,8 +52,7 @@ function schemaToZod(schema: JsonSchema): z.ZodTypeAny {
     default:
       value = z.unknown();
   }
-  if (schema.default !== undefined) return value.default(schema.default);
-  return value;
+  return schema.default !== undefined ? value.default(schema.default) : value;
 }
 
 function jsonSchemaToZodShape(schema: JsonSchema | undefined): z.ZodRawShape {
