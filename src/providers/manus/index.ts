@@ -8,9 +8,9 @@ export function createManusAdapter(): ProviderAdapter {
   return {
     id: "manus",
     listTools: () => tools,
-    async callTool(name) {
+    async callTool(name, _args, context) {
       if (!endpoint || name !== "manus.status") throw new GatewayError("PROVIDER_UNAVAILABLE", "Manus MCP endpoint is not configured.", 503);
-      const response = await fetch(endpoint, { method: "GET", headers: token ? { authorization: `Bearer ${token}` } : {} });
+      const response = await fetch(endpoint, { method: "GET", headers: token ? { authorization: `Bearer ${token}` } : {}, signal: context.signal });
       if (!response.ok) throw new GatewayError("PROVIDER_UNAVAILABLE", "Manus MCP endpoint is unavailable.", 503);
       return { content: [{ type: "text", text: JSON.stringify({ reachable: true, status: response.status }) }] };
     },
